@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Race Share｜メインレース予想共有</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- サイトパスワードのログイン画面（未認証時はこれだけ表示） -->
+<div id="login-screen" class="login-screen">
+  <div class="login-box">
+    <div class="logo-mark large">馬</div>
+    <div class="login-title">RACE SHARE</div>
+    <div class="login-subtitle">合言葉を入力してください</div>
+    <input type="password" id="login-password" class="form-input" placeholder="合言葉">
+    <button class="submit-btn" id="login-btn">入る</button>
+    <p id="login-error" class="login-error"></p>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none;">
+
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <div class="header-inner">
+      <span class="logo-mark">馬</span>
+      <div class="logo-text">
+        <span class="logo-en">RACE SHARE</span>
+        <span class="logo-jp">メインレース予想共有</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main id="main-content"></main>
+
+  <!-- ボトムナビ -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-page="home">
+      <span class="nav-icon">◉</span><span>ホーム</span>
+    </button>
+    <button class="nav-btn" data-page="prediction">
+      <span class="nav-icon">🧠</span><span>AI予想</span>
+    </button>
+    <button class="nav-btn" data-page="entry">
+      <span class="nav-icon">✎</span><span>予想する</span>
+    </button>
+    <button class="nav-btn" data-page="entries">
+      <span class="nav-icon">☰</span><span>みんな</span>
+    </button>
+    <button class="nav-btn" data-page="ranking">
+      <span class="nav-icon">★</span><span>ランク</span>
+    </button>
+    <button class="nav-btn" data-page="past">
+      <span class="nav-icon">🕰</span><span>過去</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- トースト通知 -->
+<div id="toast" class="toast"></div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
