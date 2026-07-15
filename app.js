@@ -805,6 +805,8 @@ function renderAdmin() {
 }
 
 function renderAdminPanel(races) {
+  const activeRaces = (races || []).filter(r => r['状態'] === '受付中' || r['状態'] === '締切');
+
   main.innerHTML = `
     <div class="admin-section">
       <h2 class="section-title">新しいレースを登録</h2>
@@ -835,8 +837,19 @@ function renderAdminPanel(races) {
 
     <div class="admin-section">
       <h2 class="section-title">レース管理</h2>
-      <p class="form-hint">各レースカードの中から、AI予想・出走馬・結果を登録できます。</p>
-      <div id="a-race-list"></div>
+      ${activeRaces.length === 0 ? `
+        <div class="empty-state"><p>受付中・締切中のレースがありません。<br>上のフォームからレースを登録してください。</p></div>
+      ` : `
+        <div class="card">
+          <div class="form-group">
+            <label class="form-label">対象レース</label>
+            <select id="a-race-select" class="form-input">
+              ${activeRaces.map(r => `<option value="${r['RaceID']}">${escapeHtml(r['レース名'])}（${escapeHtml(r['状態'])}）</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div id="a-race-detail"></div>
+      `}
     </div>
   `;
 
@@ -867,158 +880,175 @@ function renderAdminPanel(races) {
     }
   });
 
-  const listEl = document.getElementById('a-race-list');
-  if (!races || races.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><p>登録済みのレースがありません</p></div>`;
-    return;
+  if (activeRaces.length > 0) {
+    const select = document.getElementById('a-race-select');
+    const loadDetail = () => renderAdminRaceDetail(activeRaces.find(r => r['RaceID'] === select.value));
+    select.addEventListener('change', loadDetail);
+    loadDetail();
   }
-
-  // 各レースのAI予想・出走馬を先読み
-  Promise.all(races.map(async r => {
-    const prediction = await API.getPrediction(r['RaceID']);
-    const horses = await API.getHorses(r['RaceID']);
-    return { raceId: r['RaceID'], prediction, horses };
-  })).then(extraDataList => {
-    const extraByRaceId = {};
-    extraDataList.forEach(d => { extraByRaceId[d.raceId] = d; });
-
-    listEl.innerHTML = races.map(r => {
-      const extra = extraByRaceId[r['RaceID']] || { prediction: null, horses: [] };
-      const predictionText = extra.prediction && extra.prediction['本文'] ? extra.prediction['本文'] : '';
-      const horsesText = extra.horses && extra.horses.length > 0
-        ? extra.horses.map(h => `${h['枠番']},${h['馬番']},${h['馬名']},${h['騎手']}`).join('\n')
-        : '';
-
-      return `
-        <div class="card">
-          <div class="past-race-head">
-            <span class="past-race-name">${escapeHtml(r['レース名'])}</span>
-            <span class="race-status ${r['状態'] === '受付中' ? 'open' : 'closed'}">${escapeHtml(r['状態'])}</span>
-          </div>
-          <p class="form-hint">${formatDate(r['開催日'])} ／ ${escapeHtml(r['競馬場'] || '')}</p>
-
-          <div class="form-group mt-8">
-            <label class="form-label">状態を変更</label>
-            <div style="display:flex; gap:8px;">
-              <button class="quick-action a-status-btn" data-race="${r['RaceID']}" data-status="受付中" style="flex:1;">受付中</button>
-              <button class="quick-action a-status-btn" data-race="${r['RaceID']}" data-status="締切" style="flex:1;">締切</button>
-            </div>
-          </div>
-
-          <div class="divider-label">出走馬・枠順</div>
-          <p class="form-hint">1行に1頭ずつ「枠番,馬番,馬名,騎手」の形式で入力</p>
-          <div class="form-group mt-8">
-            <textarea class="form-input a-horses-content" data-race="${r['RaceID']}" placeholder="1,1,馬名,騎手名&#10;2,2,馬名,騎手名" style="min-height:160px; font-family:monospace; font-size:13px;">${escapeHtml(horsesText)}</textarea>
-          </div>
-          <button class="submit-btn a-horses-btn" data-race="${r['RaceID']}">出走馬を保存</button>
-
-          <div class="divider-label">AI予想</div>
-          <div class="form-group mt-8">
-            <textarea class="form-input a-prediction-content" data-race="${r['RaceID']}" placeholder="ここにAI予想の全文を貼り付け" style="min-height:180px;">${escapeHtml(predictionText)}</textarea>
-          </div>
-          <button class="submit-btn a-prediction-btn" data-race="${r['RaceID']}">AI予想を保存</button>
-
-          <div class="divider-label">結果入力</div>
-          <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <input type="number" class="form-input a-first" placeholder="1着" data-race="${r['RaceID']}">
-            <input type="number" class="form-input a-second" placeholder="2着" data-race="${r['RaceID']}">
-            <input type="number" class="form-input a-third" placeholder="3着" data-race="${r['RaceID']}">
-          </div>
-          <button class="submit-btn a-result-btn" data-race="${r['RaceID']}">結果を確定してランキング更新</button>
-        </div>
-      `;
-    }).join('');
-
-    wireAdminRaceCardEvents(listEl);
-  });
 }
 
-function wireAdminRaceCardEvents(listEl) {
-  listEl.querySelectorAll('.a-prediction-btn').forEach(btn => {
+async function renderAdminRaceDetail(race) {
+  const detailEl = document.getElementById('a-race-detail');
+  if (!race) return;
+  detailEl.innerHTML = `<div class="loading">読み込み中…</div>`;
+
+  const [prediction, horses] = await Promise.all([
+    API.getPrediction(race['RaceID']),
+    API.getHorses(race['RaceID'])
+  ]);
+
+  const predictionText = prediction && prediction['本文'] ? prediction['本文'] : '';
+  const horsesText = horses && horses.length > 0
+    ? horses.map(h => `${h['枠番']},${h['馬番']},${h['馬名']},${h['騎手']}`).join('\n')
+    : '';
+  const raceId = race['RaceID'];
+
+  detailEl.innerHTML = `
+    <div class="card">
+      <div class="past-race-head">
+        <span class="past-race-name">${escapeHtml(race['レース名'])}</span>
+        <span class="race-status ${race['状態'] === '受付中' ? 'open' : 'closed'}">${escapeHtml(race['状態'])}</span>
+      </div>
+      <p class="form-hint">${formatDate(race['開催日'])} ／ ${escapeHtml(race['競馬場'] || '')}</p>
+
+      <div class="form-group mt-8">
+        <label class="form-label">状態を変更</label>
+        <div style="display:flex; gap:8px;">
+          <button class="quick-action a-status-btn" data-status="受付中" style="flex:1;">受付中にする</button>
+          <button class="quick-action a-status-btn" data-status="締切" style="flex:1;">締切にする</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="divider-label" style="margin-top:0;">出走馬・枠順</div>
+      <p class="form-hint">1行に1頭ずつ「枠番,馬番,馬名,騎手」の形式で入力</p>
+      <div class="form-group mt-8">
+        <textarea id="a-horses-content" class="form-input" placeholder="1,1,馬名,騎手名&#10;2,2,馬名,騎手名" style="min-height:160px; font-family:monospace; font-size:13px;">${escapeHtml(horsesText)}</textarea>
+      </div>
+      <button class="submit-btn" id="a-horses-btn">出走馬を保存</button>
+      <p id="a-horses-status" class="save-status"></p>
+    </div>
+
+    <div class="card">
+      <div class="divider-label" style="margin-top:0;">AI予想</div>
+      <div class="form-group mt-8">
+        <textarea id="a-prediction-content" class="form-input" placeholder="ここにAI予想の全文を貼り付け" style="min-height:180px;">${escapeHtml(predictionText)}</textarea>
+      </div>
+      <button class="submit-btn" id="a-prediction-btn">AI予想を保存</button>
+      <p id="a-prediction-status" class="save-status"></p>
+    </div>
+
+    <div class="card">
+      <div class="divider-label" style="margin-top:0;">結果入力</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <input type="number" class="form-input" id="a-first" placeholder="1着">
+        <input type="number" class="form-input" id="a-second" placeholder="2着">
+        <input type="number" class="form-input" id="a-third" placeholder="3着">
+      </div>
+      <button class="submit-btn" id="a-result-btn">結果を確定してランキング更新</button>
+    </div>
+  `;
+
+  document.querySelectorAll('.a-status-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const raceId = btn.dataset.race;
-      const content = listEl.querySelector(`.a-prediction-content[data-race="${raceId}"]`).value.trim();
-      if (!content) {
-        showToast('AI予想の本文を入力してください', true);
-        return;
-      }
       btn.disabled = true;
       try {
-        await API.adminSubmitPrediction({ adminCode: state.adminCode, raceId, content });
-        showToast('AI予想を保存しました');
-      } catch (err) {
-        showToast(err.message, true);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  listEl.querySelectorAll('.a-horses-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const raceId = btn.dataset.race;
-      const raw = listEl.querySelector(`.a-horses-content[data-race="${raceId}"]`).value.trim();
-      if (!raw) {
-        showToast('出走馬データを入力してください', true);
-        return;
-      }
-      const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
-      const horseData = [];
-      for (const line of lines) {
-        const parts = line.split(',').map(p => p.trim());
-        if (parts.length < 4) {
-          showToast(`形式が正しくない行があります: ${line}`, true);
-          return;
-        }
-        horseData.push({ waku: parts[0], umaban: parts[1], name: parts[2], jockey: parts[3] });
-      }
-      btn.disabled = true;
-      try {
-        await API.adminSubmitHorses({ adminCode: state.adminCode, raceId, horses: JSON.stringify(horseData) });
-        showToast('出走馬を保存しました');
-      } catch (err) {
-        showToast(err.message, true);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  listEl.querySelectorAll('.a-status-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      try {
-        await API.adminUpdateRaceStatus({ adminCode: state.adminCode, raceId: btn.dataset.race, status: btn.dataset.status });
+        await API.adminUpdateRaceStatus({ adminCode: state.adminCode, raceId, status: btn.dataset.status });
         showToast('状態を更新しました');
         const races = await API.adminGetRaces(state.adminCode);
         renderAdminPanel(races);
       } catch (err) {
         showToast(err.message, true);
+        btn.disabled = false;
       }
     });
   });
 
-  listEl.querySelectorAll('.a-result-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const raceId = btn.dataset.race;
-      const first = listEl.querySelector(`.a-first[data-race="${raceId}"]`).value.trim();
-      const second = listEl.querySelector(`.a-second[data-race="${raceId}"]`).value.trim();
-      const third = listEl.querySelector(`.a-third[data-race="${raceId}"]`).value.trim();
-      if (!first || !second || !third) {
-        showToast('1〜3着すべて入力してください', true);
+  document.getElementById('a-prediction-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-prediction-btn');
+    const statusEl = document.getElementById('a-prediction-status');
+    const content = document.getElementById('a-prediction-content').value.trim();
+    if (!content) {
+      showToast('AI予想の本文を入力してください', true);
+      return;
+    }
+    btn.disabled = true;
+    statusEl.textContent = '';
+    try {
+      await API.adminSubmitPrediction({ adminCode: state.adminCode, raceId, content });
+      // 保存後、実際にサーバーから読み直して確実に反映されたか確認する
+      const saved = await API.getPrediction(raceId);
+      if (saved && saved['本文'] === content) {
+        showToast('AI予想を保存しました');
+        statusEl.textContent = `✓ 保存済み（${formatDateTime(saved['更新日時'])}）`;
+      } else {
+        showToast('保存の確認に失敗しました。もう一度お試しください', true);
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('a-horses-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-horses-btn');
+    const statusEl = document.getElementById('a-horses-status');
+    const raw = document.getElementById('a-horses-content').value.trim();
+    if (!raw) {
+      showToast('出走馬データを入力してください', true);
+      return;
+    }
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+    const horseData = [];
+    for (const line of lines) {
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length < 4) {
+        showToast(`形式が正しくない行があります: ${line}`, true);
         return;
       }
-      btn.disabled = true;
-      try {
-        await API.adminSubmitResult({ adminCode: state.adminCode, raceId, first, second, third });
-        showToast('結果を確定しました');
-        const races = await API.adminGetRaces(state.adminCode);
-        renderAdminPanel(races);
-      } catch (err) {
-        showToast(err.message, true);
-      } finally {
-        btn.disabled = false;
+      horseData.push({ waku: parts[0], umaban: parts[1], name: parts[2], jockey: parts[3] });
+    }
+    btn.disabled = true;
+    statusEl.textContent = '';
+    try {
+      await API.adminSubmitHorses({ adminCode: state.adminCode, raceId, horses: JSON.stringify(horseData) });
+      const saved = await API.getHorses(raceId);
+      if (saved && saved.length === horseData.length) {
+        showToast('出走馬を保存しました');
+        statusEl.textContent = `✓ ${saved.length}頭 保存済み`;
+      } else {
+        showToast('保存の確認に失敗しました。もう一度お試しください', true);
       }
-    });
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('a-result-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-result-btn');
+    const first = document.getElementById('a-first').value.trim();
+    const second = document.getElementById('a-second').value.trim();
+    const third = document.getElementById('a-third').value.trim();
+    if (!first || !second || !third) {
+      showToast('1〜3着すべて入力してください', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await API.adminSubmitResult({ adminCode: state.adminCode, raceId, first, second, third });
+      showToast('結果を確定しました');
+      const races = await API.adminGetRaces(state.adminCode);
+      renderAdminPanel(races);
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
   });
 }
 
