@@ -226,6 +226,7 @@ async function renderHome() {
   const isOpen = race['状態'] === '受付中';
   const deadline = new Date(race['締切時刻']);
   const horses = await API.getHorses(race['RaceID']);
+  const liveUrl = await API.getLiveStreamUrl();
 
   main.innerHTML = `
     ${renderRaceSwitcher(activeRaces, race['RaceID'])}
@@ -242,6 +243,12 @@ async function renderHome() {
       </span>
       <div id="countdown-area"></div>
     </div>
+
+    ${liveUrl ? `
+      <a href="${escapeHtml(liveUrl)}" target="_blank" rel="noopener" class="live-stream-btn">
+        📺 今週のレース中継を見る
+      </a>
+    ` : ''}
 
     ${horses.length > 0 ? `
       <h2 class="section-title">出走馬・枠順</h2>
@@ -867,6 +874,18 @@ function renderAdminPanel(races) {
 
   main.innerHTML = `
     <div class="admin-section">
+      <h2 class="section-title">今週の配信URL</h2>
+      <div class="card">
+        <p class="form-hint">JRA公式チャンネルなどのライブ配信URLを貼ると、ホーム画面に「配信を見る」ボタンが表示されます。</p>
+        <div class="form-group mt-8">
+          <input type="text" id="a-live-url" class="form-input" placeholder="https://www.youtube.com/live/...">
+        </div>
+        <button class="submit-btn" id="a-live-url-btn">配信URLを保存</button>
+        <p id="a-live-url-status" class="save-status"></p>
+      </div>
+    </div>
+
+    <div class="admin-section">
       <h2 class="section-title">新しいレースを登録</h2>
       <div class="card">
         <div class="form-group">
@@ -910,6 +929,27 @@ function renderAdminPanel(races) {
       `}
     </div>
   `;
+
+  // 配信URLの既存値を読み込み
+  API.getLiveStreamUrl().then(url => {
+    if (url) document.getElementById('a-live-url').value = url;
+  });
+
+  document.getElementById('a-live-url-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-live-url-btn');
+    const statusEl = document.getElementById('a-live-url-status');
+    const url = document.getElementById('a-live-url').value.trim();
+    btn.disabled = true;
+    try {
+      await API.adminSetLiveStreamUrl({ adminCode: state.adminCode, url });
+      showToast(url ? '配信URLを保存しました' : '配信URLを削除しました');
+      statusEl.textContent = url ? '✓ 保存済み' : '';
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById('a-create-btn').addEventListener('click', async () => {
     const btn = document.getElementById('a-create-btn');

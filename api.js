@@ -91,6 +91,12 @@ const API = {
   adminUpdateDeadline(params) {
     return this.call('adminUpdateDeadline', params);
   },
+  getLiveStreamUrl() {
+    return this.call('getLiveStreamUrl');
+  },
+  adminSetLiveStreamUrl(params) {
+    return this.call('adminSetLiveStreamUrl', params);
+  },
   adminSubmitResult(params) {
     return this.call('adminSubmitResult', params);
   },
