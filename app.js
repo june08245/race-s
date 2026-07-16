@@ -25,6 +25,43 @@ function sessionStorage_set(key, val) {
 const main = document.getElementById('main-content');
 const toastEl = document.getElementById('toast');
 
+// ---------------- レース選択（同時に最大2レース対応） ----------------
+async function getSelectedRaceContext() {
+  const activeRaces = await API.getActiveRaces();
+  if (!activeRaces || activeRaces.length === 0) {
+    state.selectedRaceId = null;
+    return { race: null, activeRaces: [] };
+  }
+  let race = activeRaces.find(r => r['RaceID'] === state.selectedRaceId);
+  if (!race) {
+    race = activeRaces[0];
+    state.selectedRaceId = race['RaceID'];
+  }
+  return { race, activeRaces };
+}
+
+function renderRaceSwitcher(activeRaces, selectedRaceId) {
+  if (!activeRaces || activeRaces.length < 2) return '';
+  return `
+    <div class="race-switcher">
+      ${activeRaces.map(r => `
+        <button class="race-switch-btn ${r['RaceID'] === selectedRaceId ? 'active' : ''}" data-race-id="${r['RaceID']}">
+          ${escapeHtml(r['レース名'])}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function wireRaceSwitcher() {
+  document.querySelectorAll('.race-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedRaceId = btn.dataset.raceId;
+      render();
+    });
+  });
+}
+
 // ---------------- Site Login Gate ----------------
 async function initLoginGate() {
   const loginScreen = document.getElementById('login-screen');
@@ -166,7 +203,7 @@ function renderHorseTable(horses) {
 
 // ---------------- Home ----------------
 async function renderHome() {
-  const { race } = await API.getHome();
+  const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
 
   if (!race) {
@@ -183,6 +220,7 @@ async function renderHome() {
   const horses = await API.getHorses(race['RaceID']);
 
   main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
     <div class="race-hero">
       <div class="race-hero-eyebrow">今週のメインレース</div>
       <div class="race-hero-name">${escapeHtml(race['レース名'])}</div>
@@ -213,6 +251,7 @@ async function renderHome() {
   main.querySelectorAll('[data-nav]').forEach(el => {
     el.addEventListener('click', () => navigate(el.dataset.nav));
   });
+  wireRaceSwitcher();
 
   startCountdown(deadline, isOpen);
 }
@@ -243,7 +282,7 @@ function startCountdown(deadline, isOpen) {
 
 // ---------------- AI予想 ----------------
 async function renderPrediction() {
-  const { race } = await API.getHome();
+  const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
 
   if (!race) {
@@ -255,6 +294,7 @@ async function renderPrediction() {
   const horses = await API.getHorses(race['RaceID']);
 
   main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
     ${horses.length > 0 ? `
       <h2 class="section-title">出走馬・枠順</h2>
       ${renderHorseTable(horses)}
@@ -272,11 +312,12 @@ async function renderPrediction() {
       </div>
     `}
   `;
+  wireRaceSwitcher();
 }
 
 // ---------------- Entry Form (券種方式) ----------------
 async function renderEntry() {
-  const { race } = await API.getHome();
+  const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
 
   if (!race) {
@@ -286,8 +327,10 @@ async function renderEntry() {
 
   if (race['状態'] !== '受付中') {
     main.innerHTML = `
+      ${renderRaceSwitcher(activeRaces, race['RaceID'])}
       <div class="locked-banner">🔒 このレースは締切済みです。<br>「みんなの予想」から結果をご確認ください。</div>
     `;
+    wireRaceSwitcher();
     return;
   }
 
@@ -300,6 +343,7 @@ async function renderEntry() {
   const v = (key) => myEntry ? escapeHtml(myEntry[key] || '') : '';
 
   main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
     ${horses.length > 0 ? `
       <h2 class="section-title">出走馬・枠順</h2>
       ${renderHorseTable(horses)}
@@ -369,6 +413,7 @@ async function renderEntry() {
   `;
 
   document.getElementById('submit-entry-btn').addEventListener('click', handleSubmitEntry);
+  wireRaceSwitcher();
 }
 
 async function handleSubmitEntry() {
@@ -464,7 +509,7 @@ function renderHitBadge(entry) {
 }
 
 async function renderEntries() {
-  const { race } = await API.getHome();
+  const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
 
   if (!race) {
@@ -474,7 +519,10 @@ async function renderEntries() {
 
   const { visible, entries } = await API.getEntries(race['RaceID']);
 
-  main.innerHTML = `<h2 class="section-title">みんなの買い目</h2><div id="entries-list"></div>`;
+  main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
+    <h2 class="section-title">みんなの買い目</h2><div id="entries-list"></div>`;
+  wireRaceSwitcher();
   const list = document.getElementById('entries-list');
 
   if (!visible) {
@@ -516,7 +564,7 @@ function addLiked(commentId) {
 }
 
 async function renderBoard() {
-  const { race } = await API.getHome();
+  const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
 
   if (!race) {
@@ -531,6 +579,7 @@ async function renderBoard() {
   const repliesOf = (id) => comments.filter(c => c['ParentCommentID'] === id);
 
   main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
     <h2 class="section-title">掲示板</h2>
 
     <div class="card">
@@ -554,6 +603,7 @@ async function renderBoard() {
   document.getElementById('board-submit-btn').addEventListener('click', () => handleBoardSubmit(race['RaceID']));
 
   wireCommentEvents(race['RaceID']);
+  wireRaceSwitcher();
 }
 
 function renderCommentCard(comment, replies, liked) {

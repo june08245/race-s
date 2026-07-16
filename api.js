@@ -41,6 +41,9 @@ const API = {
   getHome() {
     return this.call('getHome');
   },
+  getActiveRaces() {
+    return this.call('getActiveRaces');
+  },
   getRace() {
     return this.call('getRace');
   },

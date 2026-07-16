@@ -8,7 +8,7 @@
 // ==========================================================
 
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycby17Ti_EVv9pJtPhgzeWfphcqbIvxlsz66UG5NEhgpatKB5qX0FrW5kJPIqz7fNW0Ns-Q/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwBLZMWYFcPXDXiCdNAXbjzk3ByYfhgSa3o4CPjUeRzmD-OJov-XaN6DRWRJ8S112XMbw/exec',
   MARKS: ['◎', '○', '▲', '☆', '△', '×'],
   MARK_LABELS: {
     '◎': '本命',
