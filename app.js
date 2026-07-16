@@ -1040,7 +1040,10 @@ async function renderAdminRaceDetail(race) {
       <div class="form-group mt-8">
         <textarea id="a-prediction-content" class="form-input" placeholder="ここにAI予想の全文を貼り付け" style="min-height:180px;">${escapeHtml(predictionText)}</textarea>
       </div>
-      <button class="submit-btn" id="a-prediction-btn">AI予想を保存</button>
+      <div style="display:flex; gap:8px;">
+        <button class="submit-btn" id="a-prediction-btn" style="flex:1;">AI予想を保存</button>
+        <button class="quick-action" id="a-prediction-clear-btn" style="flex-shrink:0; padding:0 18px;">クリア</button>
+      </div>
       <p id="a-prediction-status" class="save-status"></p>
     </div>
 
@@ -1087,6 +1090,12 @@ async function renderAdminRaceDetail(race) {
       showToast(err.message, true);
       btn.disabled = false;
     }
+  });
+
+  document.getElementById('a-prediction-clear-btn').addEventListener('click', () => {
+    document.getElementById('a-prediction-content').value = '';
+    document.getElementById('a-prediction-content').focus();
+    document.getElementById('a-prediction-status').textContent = '';
   });
 
   document.getElementById('a-prediction-btn').addEventListener('click', async () => {
