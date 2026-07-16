@@ -88,6 +88,9 @@ const API = {
   adminUpdateRaceStatus(params) {
     return this.call('adminUpdateRaceStatus', params);
   },
+  adminUpdateDeadline(params) {
+    return this.call('adminUpdateDeadline', params);
+  },
   adminSubmitResult(params) {
     return this.call('adminSubmitResult', params);
   },

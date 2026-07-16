@@ -178,6 +178,13 @@ function formatDate(d) {
   return `${date.getFullYear()}/${date.getMonth()+1}/${date.getDate()}`;
 }
 
+function toDatetimeLocalValue(d) {
+  const date = new Date(d);
+  if (isNaN(date)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function renderHorseTable(horses) {
   if (!horses || horses.length === 0) return '';
   return `
@@ -969,6 +976,12 @@ async function renderAdminRaceDetail(race) {
           <button class="quick-action a-status-btn" data-status="締切" style="flex:1;">締切にする</button>
         </div>
       </div>
+
+      <div class="divider-label" style="margin-top:16px;">締切時刻を変更</div>
+      <div class="form-group mt-8">
+        <input type="datetime-local" id="a-deadline-edit" class="form-input" value="${toDatetimeLocalValue(race['締切時刻'])}">
+      </div>
+      <button class="submit-btn" id="a-deadline-btn">締切時刻を更新</button>
     </div>
 
     <div class="card">
@@ -1014,6 +1027,25 @@ async function renderAdminRaceDetail(race) {
         btn.disabled = false;
       }
     });
+  });
+
+  document.getElementById('a-deadline-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-deadline-btn');
+    const deadline = document.getElementById('a-deadline-edit').value;
+    if (!deadline) {
+      showToast('締切時刻を入力してください', true);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await API.adminUpdateDeadline({ adminCode: state.adminCode, raceId, deadline });
+      showToast('締切時刻を更新しました');
+      const races = await API.adminGetRaces(state.adminCode);
+      renderAdminPanel(races);
+    } catch (err) {
+      showToast(err.message, true);
+      btn.disabled = false;
+    }
   });
 
   document.getElementById('a-prediction-btn').addEventListener('click', async () => {
