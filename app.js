@@ -412,8 +412,13 @@ async function renderEntry() {
     const f1Selected = new Set(parseListStr(myEntry && myEntry['三連複F_1着']));
     const f2Selected = new Set(parseListStr(myEntry && myEntry['三連複F_2着']));
     const f3Selected = new Set(parseListStr(myEntry && myEntry['三連複F_3着']));
+    const tanBoxSelected = new Set(parseListStr(myEntry && myEntry['三連単BOX']));
+    const tf1Selected = new Set(parseListStr(myEntry && myEntry['三連単F_1着']));
+    const tf2Selected = new Set(parseListStr(myEntry && myEntry['三連単F_2着']));
+    const tf3Selected = new Set(parseListStr(myEntry && myEntry['三連単F_3着']));
 
     state.umarenPairs = parseListStr(myEntry && myEntry['馬連']);
+    state.widePairs = parseListStr(myEntry && myEntry['ワイド']);
     state.umatanPairs = parseListStr(myEntry && myEntry['馬単']);
 
     betSectionHtml = `
@@ -437,6 +442,19 @@ async function renderEntry() {
             <button type="button" class="quick-action pair-add-btn" data-type="umaren">追加</button>
           </div>
           <div class="pair-chips" id="umaren-chips"></div>
+        </div>
+        <p class="form-hint">2頭を選んで「追加」（順不同）</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">ワイド</div>
+        <div class="pair-builder">
+          <div class="pair-builder-row">
+            <select id="wide-a" class="form-input"><option value="">馬番を選択</option>${horseOptions}</select>
+            <select id="wide-b" class="form-input"><option value="">馬番を選択</option>${horseOptions}</select>
+            <button type="button" class="quick-action pair-add-btn" data-type="wide">追加</button>
+          </div>
+          <div class="pair-chips" id="wide-chips"></div>
         </div>
         <p class="form-hint">2頭を選んで「追加」（順不同）</p>
       </div>
@@ -469,6 +487,23 @@ async function renderEntry() {
         ${renderHorseCheckboxGrid('box', horses, boxSelected)}
         <p class="form-hint">3頭以上選ぶと、その組み合わせを全て購入</p>
       </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連単フォーメーション</div>
+        <label class="form-label small">1着候補</label>
+        ${renderHorseCheckboxGrid('tf1', horses, tf1Selected)}
+        <label class="form-label small mt-8">2着候補</label>
+        ${renderHorseCheckboxGrid('tf2', horses, tf2Selected)}
+        <label class="form-label small mt-8">3着候補</label>
+        ${renderHorseCheckboxGrid('tf3', horses, tf3Selected)}
+        <p class="form-hint">着順どおりに一致した場合のみ的中</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連単ボックス</div>
+        ${renderHorseCheckboxGrid('tbox', horses, tanBoxSelected)}
+        <p class="form-hint">3頭以上選ぶと、着順を入れ替えた並びを全て購入</p>
+      </div>
     `;
   } else {
     betSectionHtml = `
@@ -486,6 +521,12 @@ async function renderEntry() {
       <div class="bet-block">
         <div class="bet-title">馬連</div>
         <input type="text" id="bet-umaren" class="form-input" placeholder="例：3-5 または 3-5,3-8" value="${v('馬連')}">
+        <p class="form-hint">「馬番-馬番」の形式（順不同）</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">ワイド</div>
+        <input type="text" id="bet-wide" class="form-input" placeholder="例：3-5 または 3-5,3-8" value="${v('ワイド')}">
         <p class="form-hint">「馬番-馬番」の形式（順不同）</p>
       </div>
 
@@ -518,6 +559,31 @@ async function renderEntry() {
         <input type="text" id="bet-box" class="form-input" placeholder="例：3,5,8,10（3頭以上）" value="${v('三連複BOX')}">
         <p class="form-hint">入力した馬番から3頭を選ぶ組み合わせを全て購入</p>
       </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連単フォーメーション</div>
+        <div class="formation-grid">
+          <div>
+            <label class="form-label small">1着候補</label>
+            <input type="text" id="bet-tf1" class="form-input" placeholder="例：3,5" value="${v('三連単F_1着')}">
+          </div>
+          <div>
+            <label class="form-label small">2着候補</label>
+            <input type="text" id="bet-tf2" class="form-input" placeholder="例：3,5,8" value="${v('三連単F_2着')}">
+          </div>
+          <div>
+            <label class="form-label small">3着候補</label>
+            <input type="text" id="bet-tf3" class="form-input" placeholder="例：3,5,8,10" value="${v('三連単F_3着')}">
+          </div>
+        </div>
+        <p class="form-hint">着順どおりに一致した場合のみ的中</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連単ボックス</div>
+        <input type="text" id="bet-tbox" class="form-input" placeholder="例：3,5,8,10（3頭以上）" value="${v('三連単BOX')}">
+        <p class="form-hint">入力した馬番の並び替えを全て購入</p>
+      </div>
     `;
   }
 
@@ -548,6 +614,7 @@ async function renderEntry() {
 
   if (useHorseSelect) {
     renderPairChips('umaren');
+    renderPairChips('wide');
     renderPairChips('umatan');
 
     document.querySelectorAll('.pair-add-btn').forEach(btn => {
@@ -558,12 +625,12 @@ async function renderEntry() {
         const a = aSel.value, b = bSel.value;
         if (!a || !b) { showToast('2頭とも選択してください', true); return; }
         if (a === b) { showToast('同じ馬番は選べません', true); return; }
-        const sep = type === 'umaren' ? '-' : '>';
+        const sep = type === 'umatan' ? '>' : '-';
         const pair = `${a}${sep}${b}`;
         const pairs = state[`${type}Pairs`];
-        const exists = type === 'umaren'
-          ? pairs.some(p => p === `${a}-${b}` || p === `${b}-${a}`)
-          : pairs.includes(pair);
+        const exists = type === 'umatan'
+          ? pairs.includes(pair)
+          : pairs.some(p => p === `${a}-${b}` || p === `${b}-${a}`);
         if (exists) { showToast('すでに追加されています', true); return; }
         pairs.push(pair);
         renderPairChips(type);
@@ -593,20 +660,30 @@ async function handleSubmitEntry() {
     params['単勝'] = collectChecked('tansho');
     params['複勝'] = collectChecked('fukusho');
     params['馬連'] = (state.umarenPairs || []).join(',');
+    params['ワイド'] = (state.widePairs || []).join(',');
     params['馬単'] = (state.umatanPairs || []).join(',');
     params['三連複F_1着'] = collectChecked('f1');
     params['三連複F_2着'] = collectChecked('f2');
     params['三連複F_3着'] = collectChecked('f3');
     params['三連複BOX'] = collectChecked('box');
+    params['三連単F_1着'] = collectChecked('tf1');
+    params['三連単F_2着'] = collectChecked('tf2');
+    params['三連単F_3着'] = collectChecked('tf3');
+    params['三連単BOX'] = collectChecked('tbox');
   } else {
     params['単勝'] = document.getElementById('bet-tansho').value.trim();
     params['複勝'] = document.getElementById('bet-fukusho').value.trim();
     params['馬連'] = document.getElementById('bet-umaren').value.trim();
+    params['ワイド'] = document.getElementById('bet-wide').value.trim();
     params['馬単'] = document.getElementById('bet-umatan').value.trim();
     params['三連複F_1着'] = document.getElementById('bet-f1').value.trim();
     params['三連複F_2着'] = document.getElementById('bet-f2').value.trim();
     params['三連複F_3着'] = document.getElementById('bet-f3').value.trim();
     params['三連複BOX'] = document.getElementById('bet-box').value.trim();
+    params['三連単F_1着'] = document.getElementById('bet-tf1').value.trim();
+    params['三連単F_2着'] = document.getElementById('bet-tf2').value.trim();
+    params['三連単F_3着'] = document.getElementById('bet-tf3').value.trim();
+    params['三連単BOX'] = document.getElementById('bet-tbox').value.trim();
   }
 
   params.comment = document.getElementById('input-comment').value.trim();
@@ -634,6 +711,7 @@ function renderBetChips(entry) {
     { label: '単勝', key: '単勝' },
     { label: '複勝', key: '複勝' },
     { label: '馬連', key: '馬連' },
+    { label: 'ワイド', key: 'ワイド' },
     { label: '馬単', key: '馬単' }
   ];
 
@@ -656,6 +734,18 @@ function renderBetChips(entry) {
   if (entry['三連複BOX']) {
     const judged = entry.judgement ? entry.judgement.detail['三連複BOX'] : null;
     html += renderBetRow('三連複BOX', entry['三連複BOX'], judged);
+  }
+
+  const hasTanFormation = entry['三連単F_1着'] || entry['三連単F_2着'] || entry['三連単F_3着'];
+  if (hasTanFormation) {
+    const summary = `1着[${entry['三連単F_1着']||'-'}] 2着[${entry['三連単F_2着']||'-'}] 3着[${entry['三連単F_3着']||'-'}]`;
+    const judged = entry.judgement ? entry.judgement.detail['三連単F'] : null;
+    html += renderBetRow('三連単F', summary, judged);
+  }
+
+  if (entry['三連単BOX']) {
+    const judged = entry.judgement ? entry.judgement.detail['三連単BOX'] : null;
+    html += renderBetRow('三連単BOX', entry['三連単BOX'], judged);
   }
 
   return html || '<p class="form-hint">買い目未登録</p>';

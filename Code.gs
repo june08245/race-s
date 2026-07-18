@@ -26,10 +26,11 @@ const SHEET_NAMES = {
   RANKING: 'ranking',
   PREDICTION: 'prediction',
   HORSES: 'horses',
-  COMMENTS: 'comments'
+  COMMENTS: 'comments',
+  SETTINGS: 'settings'
 };
 
-const BET_TYPES = ['単勝', '複勝', '馬連', '馬単', '三連複F', '三連複BOX'];
+const BET_TYPES = ['単勝', '複勝', '馬連', 'ワイド', '馬単', '三連複F', '三連複BOX', '三連単F', '三連単BOX'];
 
 // ==== エントリーポイント ====
 
@@ -108,6 +109,9 @@ function handleRequest(e) {
       case 'likeComment':
         result = likeComment(params);
         break;
+      case 'getLiveStreamUrl':
+        result = getLiveStreamUrl();
+        break;
       // ---- 管理者用 ----
       case 'adminCreateRace':
         checkAdmin(params.adminCode);
@@ -120,6 +124,10 @@ function handleRequest(e) {
       case 'adminUpdateDeadline':
         checkAdmin(params.adminCode);
         result = adminUpdateDeadline(params);
+        break;
+      case 'adminSetLiveStreamUrl':
+        checkAdmin(params.adminCode);
+        result = adminSetLiveStreamUrl(params);
         break;
       case 'adminSubmitResult':
         checkAdmin(params.adminCode);
@@ -174,7 +182,30 @@ function getSheet(name) {
     sheet = ss.insertSheet(name);
     initSheetHeaders(sheet, name);
   }
+  if (name === SHEET_NAMES.ENTRIES) {
+    ensureEntriesColumns(sheet);
+  }
   return sheet;
+}
+
+/**
+ * entriesシートに既存の券種以外の新しい列（券種追加時など）があれば、
+ * 既存データを壊さずに末尾へ自動追加する。
+ */
+function ensureEntriesColumns(sheet) {
+  const desired = [
+    'EntryID', 'RaceID', '投稿日時', '名前',
+    '単勝', '複勝', '馬連', '馬単',
+    '三連複F_1着', '三連複F_2着', '三連複F_3着',
+    '三連複BOX', 'コメント',
+    'ワイド', '三連単F_1着', '三連単F_2着', '三連単F_3着', '三連単BOX'
+  ];
+  const lastCol = sheet.getLastColumn();
+  const currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  const missing = desired.filter(h => currentHeaders.indexOf(h) === -1);
+  if (missing.length > 0) {
+    sheet.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+  }
 }
 
 function initSheetHeaders(sheet, name) {
@@ -184,13 +215,15 @@ function initSheetHeaders(sheet, name) {
       'EntryID', 'RaceID', '投稿日時', '名前',
       '単勝', '複勝', '馬連', '馬単',
       '三連複F_1着', '三連複F_2着', '三連複F_3着',
-      '三連複BOX', 'コメント'
+      '三連複BOX', 'コメント',
+      'ワイド', '三連単F_1着', '三連単F_2着', '三連単F_3着', '三連単BOX'
     ],
     result: ['RaceID', '1着', '2着', '3着'],
     ranking: ['名前', '購入点数', '的中点数', '的中率', 'ポイント'],
     prediction: ['RaceID', '本文', '更新日時'],
     horses: ['RaceID', '枠番', '馬番', '馬名', '騎手'],
-    comments: ['CommentID', 'RaceID', 'ParentCommentID', '投稿日時', '名前', '本文', 'いいね数']
+    comments: ['CommentID', 'RaceID', 'ParentCommentID', '投稿日時', '名前', '本文', 'いいね数'],
+    settings: ['Key', 'Value']
   };
   if (headers[name]) {
     sheet.getRange(1, 1, 1, headers[name].length).setValues([headers[name]]);
@@ -253,6 +286,11 @@ function validateEntry(params) {
     if (!/^\d+-\d+$/.test(pair)) throw new Error('馬連の入力形式が正しくありません（例: 3-5 または 3-5,3-8）');
   });
 
+  const wide = parseNumberList(params['ワイド']);
+  wide.forEach(pair => {
+    if (!/^\d+-\d+$/.test(pair)) throw new Error('ワイドの入力形式が正しくありません（例: 3-5 または 3-5,3-8）');
+  });
+
   const umatan = parseNumberList(params['馬単']);
   umatan.forEach(pair => {
     if (!/^\d+>\d+$/.test(pair)) throw new Error('馬単の入力形式が正しくありません（例: 3>5 または 3>5,3>8）');
@@ -272,6 +310,21 @@ function validateEntry(params) {
   box.forEach(n => {
     if (!/^\d+$/.test(n)) throw new Error('三連複ボックスの入力形式が正しくありません（例: 3,5,8）');
   });
+
+  ['三連単F_1着', '三連単F_2着', '三連単F_3着'].forEach(key => {
+    const list = parseNumberList(params[key]);
+    list.forEach(n => {
+      if (!/^\d+$/.test(n)) throw new Error('三連単フォーメーションの入力形式が正しくありません（例: 3,5）');
+    });
+  });
+
+  const tanBox = parseNumberList(params['三連単BOX']);
+  if (tanBox.length > 0 && tanBox.length < 3) {
+    throw new Error('三連単ボックスは3頭以上入力してください（例: 3,5,8）');
+  }
+  tanBox.forEach(n => {
+    if (!/^\d+$/.test(n)) throw new Error('三連単ボックスの入力形式が正しくありません（例: 3,5,8）');
+  });
 }
 
 // ==== 予想投稿 ====
@@ -290,6 +343,9 @@ function submitEntry(params) {
     if (bt === '三連複F') {
       return params['三連複F_1着'] || params['三連複F_2着'] || params['三連複F_3着'];
     }
+    if (bt === '三連単F') {
+      return params['三連単F_1着'] || params['三連単F_2着'] || params['三連単F_3着'];
+    }
     return params[bt];
   });
   if (!hasAnyBet) throw new Error('少なくとも1つの券種を入力してください');
@@ -300,21 +356,29 @@ function submitEntry(params) {
   const existingIndex = entries.findIndex(en => en['RaceID'] === params.raceId && en['名前'] === params.name);
   const now = new Date();
 
-  const rowData = [
-    existingIndex >= 0 ? entries[existingIndex]['EntryID'] : Utilities.getUuid(),
-    params.raceId,
-    now,
-    params.name,
-    params['単勝'] || '',
-    params['複勝'] || '',
-    params['馬連'] || '',
-    params['馬単'] || '',
-    params['三連複F_1着'] || '',
-    params['三連複F_2着'] || '',
-    params['三連複F_3着'] || '',
-    params['三連複BOX'] || '',
-    params.comment || ''
-  ];
+  const dataMap = {
+    'EntryID': existingIndex >= 0 ? entries[existingIndex]['EntryID'] : Utilities.getUuid(),
+    'RaceID': params.raceId,
+    '投稿日時': now,
+    '名前': params.name,
+    '単勝': params['単勝'] || '',
+    '複勝': params['複勝'] || '',
+    '馬連': params['馬連'] || '',
+    'ワイド': params['ワイド'] || '',
+    '馬単': params['馬単'] || '',
+    '三連複F_1着': params['三連複F_1着'] || '',
+    '三連複F_2着': params['三連複F_2着'] || '',
+    '三連複F_3着': params['三連複F_3着'] || '',
+    '三連複BOX': params['三連複BOX'] || '',
+    '三連単F_1着': params['三連単F_1着'] || '',
+    '三連単F_2着': params['三連単F_2着'] || '',
+    '三連単F_3着': params['三連単F_3着'] || '',
+    '三連単BOX': params['三連単BOX'] || '',
+    'コメント': params.comment || ''
+  };
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rowData = headers.map(h => (dataMap[h] !== undefined ? dataMap[h] : ''));
 
   if (existingIndex >= 0) {
     sheet.getRange(existingIndex + 2, 1, 1, rowData.length).setValues([rowData]);
@@ -328,11 +392,15 @@ function submitEntry(params) {
 function getEntries(raceId) {
   const race = getRaceById(raceId);
   if (!race) throw new Error('レースが見つかりません');
-  if (race['状態'] === '受付中') {
-    return { visible: false, entries: [] };
-  }
+
   const sheet = getSheet(SHEET_NAMES.ENTRIES);
-  const entries = sheetToObjects(sheet).filter(en => en['RaceID'] === raceId);
+  const allEntries = sheetToObjects(sheet).filter(en => en['RaceID'] === raceId);
+
+  if (race['状態'] === '受付中') {
+    return { visible: false, entries: [], count: allEntries.length };
+  }
+
+  const entries = allEntries.slice();
   entries.sort((a, b) => new Date(a['投稿日時']) - new Date(b['投稿日時']));
 
   const resultSheet = getSheet(SHEET_NAMES.RESULT);
@@ -342,7 +410,7 @@ function getEntries(raceId) {
     judgement: result ? judgeEntry(en, result) : null
   }));
 
-  return { visible: true, entries: enriched };
+  return { visible: true, entries: enriched, count: enriched.length };
 }
 
 function getMyEntry(raceId, name) {
@@ -374,6 +442,28 @@ function combinations(arr, k) {
     }
   }
   helper(0, []);
+  return result;
+}
+
+// 順序ありの並び（三連単ボックス用）
+function permutations(arr, k) {
+  const result = [];
+  const used = new Array(arr.length).fill(false);
+  function helper(combo) {
+    if (combo.length === k) {
+      result.push([...combo]);
+      return;
+    }
+    for (let i = 0; i < arr.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      combo.push(arr[i]);
+      helper(combo);
+      combo.pop();
+      used[i] = false;
+    }
+  }
+  helper([]);
   return result;
 }
 
@@ -416,6 +506,18 @@ function judgeEntry(entry, result) {
   }
 
   {
+    // ワイド：1〜3着のうち2頭が入っていれば的中（組み合わせは問わない）
+    const list = parseNumberList(entry['ワイド']);
+    const hits = list.filter(pair => {
+      const [a, b] = pair.split('-');
+      return a !== b && top3Set.has(a) && top3Set.has(b);
+    });
+    detail['ワイド'] = { buy: list, hit: hits };
+    totalBuy += list.length;
+    totalHit += hits.length;
+  }
+
+  {
     const list = parseNumberList(entry['馬単']);
     const hits = list.filter(pair => {
       const [a, b] = pair.split('>');
@@ -450,6 +552,36 @@ function judgeEntry(entry, result) {
     const targetKey = [first, second, third].sort().join('-');
     const hits = combos.filter(key => key === targetKey);
     detail['三連複BOX'] = { buy: combos, hit: hits };
+    totalBuy += combos.length;
+    totalHit += hits.length;
+  }
+
+  {
+    // 三連単フォーメーション：着順どおりに一致するかを判定
+    const c1 = parseNumberList(entry['三連単F_1着']);
+    const c2 = parseNumberList(entry['三連単F_2着']);
+    const c3 = parseNumberList(entry['三連単F_3着']);
+    const combos = new Set();
+    c1.forEach(a => c2.forEach(b => c3.forEach(c => {
+      if (a !== b && b !== c && a !== c) {
+        combos.add([a, b, c].join('-'));
+      }
+    })));
+    const buyList = Array.from(combos);
+    const targetKey = [first, second, third].join('-');
+    const hits = buyList.filter(key => key === targetKey);
+    detail['三連単F'] = { buy: buyList, hit: hits };
+    totalBuy += buyList.length;
+    totalHit += hits.length;
+  }
+
+  {
+    // 三連単ボックス：選んだ馬の並び替え全通り（着順あり）
+    const nums = parseNumberList(entry['三連単BOX']);
+    const combos = nums.length >= 3 ? permutations(nums, 3).map(c => c.join('-')) : [];
+    const targetKey = [first, second, third].join('-');
+    const hits = combos.filter(key => key === targetKey);
+    detail['三連単BOX'] = { buy: combos, hit: hits };
     totalBuy += combos.length;
     totalHit += hits.length;
   }
@@ -703,6 +835,29 @@ function adminUpdateDeadline(params) {
     }
   }
   throw new Error('レースが見つかりません');
+}
+
+// ==== 設定（今週の配信URLなど） ====
+
+function getLiveStreamUrl() {
+  const sheet = getSheet(SHEET_NAMES.SETTINGS);
+  const rows = sheetToObjects(sheet);
+  const row = rows.find(r => r['Key'] === 'liveStreamUrl');
+  return row ? row['Value'] : '';
+}
+
+function adminSetLiveStreamUrl(params) {
+  const url = (params.url || '').trim();
+  const sheet = getSheet(SHEET_NAMES.SETTINGS);
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === 'liveStreamUrl') {
+      sheet.getRange(i + 1, 2).setValue(url);
+      return { success: true };
+    }
+  }
+  sheet.appendRow(['liveStreamUrl', url]);
+  return { success: true };
 }
 
 function updateRaceStatus(raceId, status) {
