@@ -331,6 +331,48 @@ async function renderPrediction() {
 }
 
 // ---------------- Entry Form (券種方式) ----------------
+function parseListStr(str) {
+  return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function renderHorseCheckboxGrid(group, horses, selectedSet) {
+  return `
+    <div class="horse-check-grid">
+      ${horses.map(h => {
+        const num = String(h['馬番']);
+        const checked = selectedSet.has(num) ? 'checked' : '';
+        return `
+          <label class="horse-check-item">
+            <input type="checkbox" class="hcheck" data-group="${group}" value="${num}" ${checked}>
+            <span>${num} ${escapeHtml(h['馬名'])}</span>
+          </label>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderPairChips(type) {
+  const el = document.getElementById(`${type}-chips`);
+  if (!el) return;
+  const pairs = state[`${type}Pairs`] || [];
+  if (pairs.length === 0) {
+    el.innerHTML = `<p class="form-hint">まだ追加されていません</p>`;
+    return;
+  }
+  el.innerHTML = pairs.map((p, i) => `
+    <span class="pair-chip">${escapeHtml(p)}<button type="button" class="pair-chip-x" data-type="${type}" data-idx="${i}">×</button></span>
+  `).join('');
+  el.querySelectorAll('.pair-chip-x').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.type;
+      const idx = Number(btn.dataset.idx);
+      state[`${t}Pairs`].splice(idx, 1);
+      renderPairChips(t);
+    });
+  });
+}
+
 async function renderEntry() {
   const { race, activeRaces } = await getSelectedRaceContext();
   state.race = race;
@@ -354,26 +396,86 @@ async function renderEntry() {
     myEntry = await API.getMyEntry(race['RaceID'], state.userName);
   }
   const horses = await API.getHorses(race['RaceID']);
+  const useHorseSelect = horses.length > 0;
+  state.entryUsesHorseSelect = useHorseSelect;
 
   const v = (key) => myEntry ? escapeHtml(myEntry[key] || '') : '';
 
-  main.innerHTML = `
-    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
-    ${horses.length > 0 ? `
-      <h2 class="section-title">出走馬・枠順</h2>
-      ${renderHorseTable(horses)}
-    ` : ''}
-    <h2 class="section-title">買い目を投稿</h2>
-    <div class="card">
-      <div class="form-group">
-        <label class="form-label">お名前</label>
-        <input type="text" id="input-name" class="form-input" placeholder="例：山田太郎" value="${escapeHtml(state.userName)}">
+  let betSectionHtml;
+
+  if (useHorseSelect) {
+    const horseOptions = horses.map(h => `<option value="${h['馬番']}">${h['馬番']} ${escapeHtml(h['馬名'])}</option>`).join('');
+
+    const tanshoSelected = new Set(parseListStr(myEntry && myEntry['単勝']));
+    const fukushoSelected = new Set(parseListStr(myEntry && myEntry['複勝']));
+    const boxSelected = new Set(parseListStr(myEntry && myEntry['三連複BOX']));
+    const f1Selected = new Set(parseListStr(myEntry && myEntry['三連複F_1着']));
+    const f2Selected = new Set(parseListStr(myEntry && myEntry['三連複F_2着']));
+    const f3Selected = new Set(parseListStr(myEntry && myEntry['三連複F_3着']));
+
+    state.umarenPairs = parseListStr(myEntry && myEntry['馬連']);
+    state.umatanPairs = parseListStr(myEntry && myEntry['馬単']);
+
+    betSectionHtml = `
+      <div class="bet-block">
+        <div class="bet-title">単勝</div>
+        ${renderHorseCheckboxGrid('tansho', horses, tanshoSelected)}
+        <p class="form-hint">複数頭選択できます</p>
       </div>
 
       <div class="bet-block">
+        <div class="bet-title">複勝</div>
+        ${renderHorseCheckboxGrid('fukusho', horses, fukushoSelected)}
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">馬連</div>
+        <div class="pair-builder">
+          <div class="pair-builder-row">
+            <select id="umaren-a" class="form-input"><option value="">馬番を選択</option>${horseOptions}</select>
+            <select id="umaren-b" class="form-input"><option value="">馬番を選択</option>${horseOptions}</select>
+            <button type="button" class="quick-action pair-add-btn" data-type="umaren">追加</button>
+          </div>
+          <div class="pair-chips" id="umaren-chips"></div>
+        </div>
+        <p class="form-hint">2頭を選んで「追加」（順不同）</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">馬単</div>
+        <div class="pair-builder">
+          <div class="pair-builder-row">
+            <select id="umatan-a" class="form-input"><option value="">1着</option>${horseOptions}</select>
+            <select id="umatan-b" class="form-input"><option value="">2着</option>${horseOptions}</select>
+            <button type="button" class="quick-action pair-add-btn" data-type="umatan">追加</button>
+          </div>
+          <div class="pair-chips" id="umatan-chips"></div>
+        </div>
+        <p class="form-hint">1着・2着の順で選んで「追加」</p>
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連複フォーメーション</div>
+        <label class="form-label small">1着候補</label>
+        ${renderHorseCheckboxGrid('f1', horses, f1Selected)}
+        <label class="form-label small mt-8">2着候補</label>
+        ${renderHorseCheckboxGrid('f2', horses, f2Selected)}
+        <label class="form-label small mt-8">3着候補</label>
+        ${renderHorseCheckboxGrid('f3', horses, f3Selected)}
+      </div>
+
+      <div class="bet-block">
+        <div class="bet-title">三連複ボックス</div>
+        ${renderHorseCheckboxGrid('box', horses, boxSelected)}
+        <p class="form-hint">3頭以上選ぶと、その組み合わせを全て購入</p>
+      </div>
+    `;
+  } else {
+    betSectionHtml = `
+      <div class="bet-block">
         <div class="bet-title">単勝</div>
         <input type="text" id="bet-tansho" class="form-input" placeholder="例：5 または 5,8" value="${v('単勝')}">
-        <p class="form-hint">複数点はカンマ区切り</p>
+        <p class="form-hint">複数点はカンマ区切り（出走馬未登録のため手入力）</p>
       </div>
 
       <div class="bet-block">
@@ -416,6 +518,23 @@ async function renderEntry() {
         <input type="text" id="bet-box" class="form-input" placeholder="例：3,5,8,10（3頭以上）" value="${v('三連複BOX')}">
         <p class="form-hint">入力した馬番から3頭を選ぶ組み合わせを全て購入</p>
       </div>
+    `;
+  }
+
+  main.innerHTML = `
+    ${renderRaceSwitcher(activeRaces, race['RaceID'])}
+    ${horses.length > 0 ? `
+      <h2 class="section-title">出走馬・枠順</h2>
+      ${renderHorseTable(horses)}
+    ` : ''}
+    <h2 class="section-title">買い目を投稿</h2>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">お名前</label>
+        <input type="text" id="input-name" class="form-input" placeholder="例：山田太郎" value="${escapeHtml(state.userName)}">
+      </div>
+
+      ${betSectionHtml}
 
       <div class="form-group">
         <label class="form-label">コメント（任意）</label>
@@ -426,6 +545,32 @@ async function renderEntry() {
       <p class="form-hint" style="text-align:center; margin-top:10px;">締切前なら何度でも上書きできます。使わない券種は空欄でOK</p>
     </div>
   `;
+
+  if (useHorseSelect) {
+    renderPairChips('umaren');
+    renderPairChips('umatan');
+
+    document.querySelectorAll('.pair-add-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.type;
+        const aSel = document.getElementById(`${type}-a`);
+        const bSel = document.getElementById(`${type}-b`);
+        const a = aSel.value, b = bSel.value;
+        if (!a || !b) { showToast('2頭とも選択してください', true); return; }
+        if (a === b) { showToast('同じ馬番は選べません', true); return; }
+        const sep = type === 'umaren' ? '-' : '>';
+        const pair = `${a}${sep}${b}`;
+        const pairs = state[`${type}Pairs`];
+        const exists = type === 'umaren'
+          ? pairs.some(p => p === `${a}-${b}` || p === `${b}-${a}`)
+          : pairs.includes(pair);
+        if (exists) { showToast('すでに追加されています', true); return; }
+        pairs.push(pair);
+        renderPairChips(type);
+        aSel.value = ''; bSel.value = '';
+      });
+    });
+  }
 
   document.getElementById('submit-entry-btn').addEventListener('click', handleSubmitEntry);
   wireRaceSwitcher();
@@ -440,19 +585,31 @@ async function handleSubmitEntry() {
     return;
   }
 
-  const params = {
-    raceId: state.race['RaceID'],
-    name,
-    '単勝': document.getElementById('bet-tansho').value.trim(),
-    '複勝': document.getElementById('bet-fukusho').value.trim(),
-    '馬連': document.getElementById('bet-umaren').value.trim(),
-    '馬単': document.getElementById('bet-umatan').value.trim(),
-    '三連複F_1着': document.getElementById('bet-f1').value.trim(),
-    '三連複F_2着': document.getElementById('bet-f2').value.trim(),
-    '三連複F_3着': document.getElementById('bet-f3').value.trim(),
-    '三連複BOX': document.getElementById('bet-box').value.trim(),
-    comment: document.getElementById('input-comment').value.trim()
-  };
+  const params = { raceId: state.race['RaceID'], name };
+
+  if (state.entryUsesHorseSelect) {
+    const collectChecked = (group) =>
+      Array.from(document.querySelectorAll(`.hcheck[data-group="${group}"]:checked`)).map(el => el.value).join(',');
+    params['単勝'] = collectChecked('tansho');
+    params['複勝'] = collectChecked('fukusho');
+    params['馬連'] = (state.umarenPairs || []).join(',');
+    params['馬単'] = (state.umatanPairs || []).join(',');
+    params['三連複F_1着'] = collectChecked('f1');
+    params['三連複F_2着'] = collectChecked('f2');
+    params['三連複F_3着'] = collectChecked('f3');
+    params['三連複BOX'] = collectChecked('box');
+  } else {
+    params['単勝'] = document.getElementById('bet-tansho').value.trim();
+    params['複勝'] = document.getElementById('bet-fukusho').value.trim();
+    params['馬連'] = document.getElementById('bet-umaren').value.trim();
+    params['馬単'] = document.getElementById('bet-umatan').value.trim();
+    params['三連複F_1着'] = document.getElementById('bet-f1').value.trim();
+    params['三連複F_2着'] = document.getElementById('bet-f2').value.trim();
+    params['三連複F_3着'] = document.getElementById('bet-f3').value.trim();
+    params['三連複BOX'] = document.getElementById('bet-box').value.trim();
+  }
+
+  params.comment = document.getElementById('input-comment').value.trim();
 
   btn.disabled = true;
   btn.textContent = '送信中…';
