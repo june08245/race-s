@@ -532,7 +532,7 @@ async function renderEntries() {
     return;
   }
 
-  const { visible, entries } = await API.getEntries(race['RaceID']);
+  const { visible, entries, count } = await API.getEntries(race['RaceID']);
 
   main.innerHTML = `
     ${renderRaceSwitcher(activeRaces, race['RaceID'])}
@@ -541,7 +541,11 @@ async function renderEntries() {
   const list = document.getElementById('entries-list');
 
   if (!visible) {
-    list.innerHTML = `<div class="locked-banner">🔒 締切後に公開されます。<br>もうしばらくお待ちください。</div>`;
+    list.innerHTML = `
+      <div class="locked-banner">
+        🔒 締切後に公開されます。<br>もうしばらくお待ちください。
+        ${count > 0 ? `<div class="entry-count-badge">✎ 現在 ${count}人 予想中</div>` : ''}
+      </div>`;
     return;
   }
 
