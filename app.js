@@ -593,6 +593,14 @@ async function renderEntry() {
       <h2 class="section-title">出走馬・枠順</h2>
       ${renderHorseTable(horses)}
     ` : ''}
+    ${myEntry ? `
+      <h2 class="section-title">現在の投稿内容</h2>
+      <div class="card my-entry-summary">
+        <div class="my-entry-summary-head">✓ 投稿済み（最終更新: ${formatDateTime(myEntry['投稿日時'])}）</div>
+        <div class="bet-list">${renderBetChips(myEntry)}</div>
+        ${myEntry['コメント'] ? `<div class="entry-comment">${escapeHtml(myEntry['コメント'])}</div>` : ''}
+      </div>
+    ` : ''}
     <h2 class="section-title">買い目を投稿</h2>
     <div class="card">
       <div class="form-group">

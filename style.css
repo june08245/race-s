@@ -98,6 +98,16 @@ a { color: var(--gold); }
   color: var(--gold);
   font-size: 16px;
   flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 5px;
+  object-fit: contain;
+}
+
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo-text {
@@ -890,6 +900,21 @@ textarea.form-input {
   font-size: 14px;
   line-height: 1;
   padding: 2px 4px;
+}
+
+.my-entry-summary {
+  border: 1px solid var(--gold);
+  background: rgba(201,162,75,0.06);
+}
+
+.my-entry-summary-head {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--gold-bright);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--divider);
 }
 
 /* ---------------- Bet Type Input Blocks ---------------- */
