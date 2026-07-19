@@ -332,7 +332,7 @@ async function renderPrediction() {
 
 // ---------------- Entry Form (券種方式) ----------------
 function parseListStr(str) {
-  return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+  return String(str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
 function renderHorseCheckboxGrid(group, horses, selectedSet) {
