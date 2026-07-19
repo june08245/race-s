@@ -209,6 +209,28 @@ function renderHorseTable(horses) {
   `;
 }
 
+function horseNameByNumber(horses, num) {
+  if (!horses || !num) return '';
+  const found = horses.find(h => String(h['馬番']) === String(num));
+  return found ? found['馬名'] : '';
+}
+
+function renderResultChips(result, horses) {
+  if (!result) return '';
+  const label = (posKey) => {
+    const num = result[posKey];
+    const name = horseNameByNumber(horses, num);
+    return name ? `${escapeHtml(num)} ${escapeHtml(name)}` : escapeHtml(num);
+  };
+  return `
+    <div class="past-result-row">
+      <span class="result-chip">1着 ${label('1着')}</span>
+      <span class="result-chip">2着 ${label('2着')}</span>
+      <span class="result-chip">3着 ${label('3着')}</span>
+    </div>
+  `;
+}
+
 // ---------------- Home ----------------
 async function renderHome() {
   const { race, activeRaces } = await getSelectedRaceContext();
@@ -229,19 +251,14 @@ async function renderHome() {
     const r = latestPastRace.race;
     const result = latestPastRace.result;
     const entryCount = latestPastRace.entryCount || 0;
+    const latestHorses = latestPastRace.horses || [];
 
     main.innerHTML = `
       <div class="wrapup-card">
         <div class="wrapup-eyebrow">今週もお疲れ様でした</div>
         <div class="wrapup-race-name">${escapeHtml(r['レース名'])}</div>
         <div class="wrapup-race-date">${formatDate(r['開催日'])}｜${escapeHtml(r['競馬場'] || '')}</div>
-        ${result ? `
-          <div class="past-result-row" style="margin-top:16px;">
-            <span class="result-chip">1着 ${escapeHtml(result['1着'])}</span>
-            <span class="result-chip">2着 ${escapeHtml(result['2着'])}</span>
-            <span class="result-chip">3着 ${escapeHtml(result['3着'])}</span>
-          </div>
-        ` : ''}
+        ${result ? renderResultChips(result, latestHorses) : ''}
         ${entryCount > 0 ? `<div class="wrapup-count">✎ ${entryCount}人が参加しました</div>` : ''}
       </div>
 
@@ -1123,13 +1140,7 @@ async function renderPastDetail(raceId) {
     <div class="race-hero">
       <div class="race-hero-eyebrow">${formatDate(race['開催日'])}</div>
       <div class="race-hero-name">${escapeHtml(race['レース名'])}</div>
-      ${result ? `
-        <div class="past-result-row">
-          <span class="result-chip">1着 ${escapeHtml(result['1着'])}</span>
-          <span class="result-chip">2着 ${escapeHtml(result['2着'])}</span>
-          <span class="result-chip">3着 ${escapeHtml(result['3着'])}</span>
-        </div>
-      ` : ''}
+      ${result ? renderResultChips(result, horses) : ''}
     </div>
 
     ${horses && horses.length > 0 ? `
@@ -1199,7 +1210,13 @@ function renderAdmin() {
 }
 
 function renderAdminPanel(races) {
-  const activeRaces = (races || []).filter(r => r['状態'] === '受付中' || r['状態'] === '締切');
+  const allRaces = races || [];
+  const activeRaces = allRaces.filter(r => r['状態'] === '受付中' || r['状態'] === '締切');
+  const finishedRaces = allRaces
+    .filter(r => r['状態'] === '結果確定')
+    .sort((a, b) => new Date(b['開催日']) - new Date(a['開催日']))
+    .slice(0, 5); // 直近5件までを編集対象に含める（反省会などをあとから書けるように）
+  const selectableRaces = [...activeRaces, ...finishedRaces];
 
   main.innerHTML = `
     <div class="admin-section">
@@ -1243,16 +1260,17 @@ function renderAdminPanel(races) {
 
     <div class="admin-section">
       <h2 class="section-title">レース管理</h2>
-      ${activeRaces.length === 0 ? `
-        <div class="empty-state"><p>受付中・締切中のレースがありません。<br>上のフォームからレースを登録してください。</p></div>
+      ${selectableRaces.length === 0 ? `
+        <div class="empty-state"><p>編集できるレースがありません。<br>上のフォームからレースを登録してください。</p></div>
       ` : `
         <div class="card">
           <div class="form-group">
             <label class="form-label">対象レース</label>
             <select id="a-race-select" class="form-input">
-              ${activeRaces.map(r => `<option value="${r['RaceID']}">${escapeHtml(r['レース名'])}（${escapeHtml(r['状態'])}）</option>`).join('')}
+              ${selectableRaces.map(r => `<option value="${r['RaceID']}">${escapeHtml(r['レース名'])}（${escapeHtml(r['状態'])}）</option>`).join('')}
             </select>
           </div>
+          <p class="form-hint">結果確定済みのレースも直近5件まで選べます（あとからAI反省会を追加する場合など）</p>
         </div>
         <div id="a-race-detail"></div>
       `}
@@ -1307,9 +1325,9 @@ function renderAdminPanel(races) {
     }
   });
 
-  if (activeRaces.length > 0) {
+  if (selectableRaces.length > 0) {
     const select = document.getElementById('a-race-select');
-    const loadDetail = () => renderAdminRaceDetail(activeRaces.find(r => r['RaceID'] === select.value));
+    const loadDetail = () => renderAdminRaceDetail(selectableRaces.find(r => r['RaceID'] === select.value));
     select.addEventListener('change', loadDetail);
     loadDetail();
   }
