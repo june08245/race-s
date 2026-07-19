@@ -68,6 +68,9 @@ const API = {
   getPrediction(raceId) {
     return this.call('getPrediction', { raceId });
   },
+  getReview(raceId) {
+    return this.call('getReview', { raceId });
+  },
   getHorses(raceId) {
     return this.call('getHorses', { raceId });
   },
@@ -105,6 +108,9 @@ const API = {
   },
   adminSubmitPrediction(params) {
     return this.call('adminSubmitPrediction', params);
+  },
+  adminSubmitReview(params) {
+    return this.call('adminSubmitReview', params);
   },
   adminSubmitHorses(params) {
     return this.call('adminSubmitHorses', params);

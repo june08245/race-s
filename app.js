@@ -215,11 +215,48 @@ async function renderHome() {
   state.race = race;
 
   if (!race) {
+    const { latestPastRace } = await API.getHome();
+
+    if (!latestPastRace) {
+      main.innerHTML = `
+        <div class="empty-state">
+          <div class="es-icon">🏇</div>
+          <p>現在受付中のレースはありません。<br>管理者がレースを登録するまでお待ちください。</p>
+        </div>`;
+      return;
+    }
+
+    const r = latestPastRace.race;
+    const result = latestPastRace.result;
+    const entryCount = latestPastRace.entryCount || 0;
+
     main.innerHTML = `
-      <div class="empty-state">
-        <div class="es-icon">🏇</div>
-        <p>現在受付中のレースはありません。<br>管理者がレースを登録するまでお待ちください。</p>
-      </div>`;
+      <div class="wrapup-card">
+        <div class="wrapup-eyebrow">今週もお疲れ様でした</div>
+        <div class="wrapup-race-name">${escapeHtml(r['レース名'])}</div>
+        <div class="wrapup-race-date">${formatDate(r['開催日'])}｜${escapeHtml(r['競馬場'] || '')}</div>
+        ${result ? `
+          <div class="past-result-row" style="margin-top:16px;">
+            <span class="result-chip">1着 ${escapeHtml(result['1着'])}</span>
+            <span class="result-chip">2着 ${escapeHtml(result['2着'])}</span>
+            <span class="result-chip">3着 ${escapeHtml(result['3着'])}</span>
+          </div>
+        ` : ''}
+        ${entryCount > 0 ? `<div class="wrapup-count">✎ ${entryCount}人が参加しました</div>` : ''}
+      </div>
+
+      <div class="quick-actions quick-actions-4">
+        <button class="quick-action" data-nav="past"><span class="qi">🕰</span>過去レースを見る</button>
+        <button class="quick-action" data-nav="board"><span class="qi">💬</span>掲示板を見る</button>
+        <button class="quick-action" data-nav="ranking"><span class="qi">★</span>ランキング</button>
+      </div>
+
+      <p class="wrapup-note">次のメインレースが決まったら、またここでお知らせします。</p>
+    `;
+
+    main.querySelectorAll('[data-nav]').forEach(el => {
+      el.addEventListener('click', () => navigate(el.dataset.nav));
+    });
     return;
   }
 
@@ -306,6 +343,7 @@ async function renderPrediction() {
   }
 
   const prediction = await API.getPrediction(race['RaceID']);
+  const review = await API.getReview(race['RaceID']);
   const horses = await API.getHorses(race['RaceID']);
 
   main.innerHTML = `
@@ -326,6 +364,14 @@ async function renderPrediction() {
         <p>今週のAI予想はまだ投稿されていません。</p>
       </div>
     `}
+
+    ${review && review['本文'] ? `
+      <h2 class="section-title">AI反省会</h2>
+      <div class="card review-card">
+        <div class="prediction-meta">更新: ${formatDateTime(review['更新日時'])}</div>
+        <div class="prediction-body">${escapeHtml(review['本文'])}</div>
+      </div>
+    ` : ''}
   `;
   wireRaceSwitcher();
 }
@@ -474,12 +520,13 @@ async function renderEntry() {
 
       <div class="bet-block">
         <div class="bet-title">三連複フォーメーション</div>
-        <label class="form-label small">1着候補</label>
+        <label class="form-label small">1列目（軸）</label>
         ${renderHorseCheckboxGrid('f1', horses, f1Selected)}
-        <label class="form-label small mt-8">2着候補</label>
+        <label class="form-label small mt-8">2列目</label>
         ${renderHorseCheckboxGrid('f2', horses, f2Selected)}
-        <label class="form-label small mt-8">3着候補</label>
+        <label class="form-label small mt-8">3列目</label>
         ${renderHorseCheckboxGrid('f3', horses, f3Selected)}
+        <p class="form-hint">着順は問いません（1〜3列目の3頭が1〜3着以内に入れば的中）</p>
       </div>
 
       <div class="bet-block">
@@ -540,18 +587,19 @@ async function renderEntry() {
         <div class="bet-title">三連複フォーメーション</div>
         <div class="formation-grid">
           <div>
-            <label class="form-label small">1着候補</label>
+            <label class="form-label small">1列目（軸）</label>
             <input type="text" id="bet-f1" class="form-input" placeholder="例：3,5" value="${v('三連複F_1着')}">
           </div>
           <div>
-            <label class="form-label small">2着候補</label>
+            <label class="form-label small">2列目</label>
             <input type="text" id="bet-f2" class="form-input" placeholder="例：3,5,8" value="${v('三連複F_2着')}">
           </div>
           <div>
-            <label class="form-label small">3着候補</label>
+            <label class="form-label small">3列目</label>
             <input type="text" id="bet-f3" class="form-input" placeholder="例：3,5,8,10" value="${v('三連複F_3着')}">
           </div>
         </div>
+        <p class="form-hint">着順は問いません（3列の3頭が1〜3着以内に入れば的中）</p>
       </div>
 
       <div class="bet-block">
@@ -734,7 +782,7 @@ function renderBetChips(entry) {
 
   const hasFormation = entry['三連複F_1着'] || entry['三連複F_2着'] || entry['三連複F_3着'];
   if (hasFormation) {
-    const summary = `1着[${entry['三連複F_1着']||'-'}] 2着[${entry['三連複F_2着']||'-'}] 3着[${entry['三連複F_3着']||'-'}]`;
+    const summary = `1列目[${entry['三連複F_1着']||'-'}] 2列目[${entry['三連複F_2着']||'-'}] 3列目[${entry['三連複F_3着']||'-'}]`;
     const judged = entry.judgement ? entry.judgement.detail['三連複F'] : null;
     html += renderBetRow('三連複F', summary, judged);
   }
@@ -1068,7 +1116,7 @@ async function renderPast() {
 }
 
 async function renderPastDetail(raceId) {
-  const { race, entries, result } = await API.getPastRaceDetail(raceId);
+  const { race, entries, result, horses, prediction, review } = await API.getPastRaceDetail(raceId);
 
   main.innerHTML = `
     <button class="quick-action" id="back-btn" style="width:auto; padding:8px 14px; margin-bottom:16px; display:inline-flex; flex-direction:row; gap:6px;">← 過去レース一覧へ</button>
@@ -1083,6 +1131,28 @@ async function renderPastDetail(raceId) {
         </div>
       ` : ''}
     </div>
+
+    ${horses && horses.length > 0 ? `
+      <h2 class="section-title">出走馬・枠順</h2>
+      ${renderHorseTable(horses)}
+    ` : ''}
+
+    ${prediction && prediction['本文'] ? `
+      <h2 class="section-title">AI予想</h2>
+      <div class="card prediction-card">
+        <div class="prediction-meta">投稿: ${formatDateTime(prediction['更新日時'])}</div>
+        <div class="prediction-body">${escapeHtml(prediction['本文'])}</div>
+      </div>
+    ` : ''}
+
+    ${review && review['本文'] ? `
+      <h2 class="section-title">AI反省会</h2>
+      <div class="card review-card">
+        <div class="prediction-meta">投稿: ${formatDateTime(review['更新日時'])}</div>
+        <div class="prediction-body">${escapeHtml(review['本文'])}</div>
+      </div>
+    ` : ''}
+
     <h2 class="section-title">みんなの買い目</h2>
     ${entries.map(en => `
       <div class="entry-card">
@@ -1250,12 +1320,14 @@ async function renderAdminRaceDetail(race) {
   if (!race) return;
   detailEl.innerHTML = `<div class="loading">読み込み中…</div>`;
 
-  const [prediction, horses] = await Promise.all([
+  const [prediction, review, horses] = await Promise.all([
     API.getPrediction(race['RaceID']),
+    API.getReview(race['RaceID']),
     API.getHorses(race['RaceID'])
   ]);
 
   const predictionText = prediction && prediction['本文'] ? prediction['本文'] : '';
+  const reviewText = review && review['本文'] ? review['本文'] : '';
   const horsesText = horses && horses.length > 0
     ? horses.map(h => `${h['枠番']},${h['馬番']},${h['馬名']},${h['騎手']}`).join('\n')
     : '';
@@ -1304,6 +1376,19 @@ async function renderAdminRaceDetail(race) {
         <button class="quick-action" id="a-prediction-clear-btn" style="flex-shrink:0; padding:0 18px;">クリア</button>
       </div>
       <p id="a-prediction-status" class="save-status"></p>
+    </div>
+
+    <div class="card">
+      <div class="divider-label" style="margin-top:0;">AI反省会</div>
+      <p class="form-hint">結果が出た後の振り返り。当たった点・外れた点などを書いておくと、AI予想ページの下に表示されます。</p>
+      <div class="form-group mt-8">
+        <textarea id="a-review-content" class="form-input" placeholder="ここに反省会の全文を貼り付け" style="min-height:180px;">${escapeHtml(reviewText)}</textarea>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="submit-btn" id="a-review-btn" style="flex:1;">反省会を保存</button>
+        <button class="quick-action" id="a-review-clear-btn" style="flex-shrink:0; padding:0 18px;">クリア</button>
+      </div>
+      <p id="a-review-status" class="save-status"></p>
     </div>
 
     <div class="card">
@@ -1373,6 +1458,38 @@ async function renderAdminRaceDetail(race) {
       const saved = await API.getPrediction(raceId);
       if (saved && saved['本文'] === content) {
         showToast('AI予想を保存しました');
+        statusEl.textContent = `✓ 保存済み（${formatDateTime(saved['更新日時'])}）`;
+      } else {
+        showToast('保存の確認に失敗しました。もう一度お試しください', true);
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('a-review-clear-btn').addEventListener('click', () => {
+    document.getElementById('a-review-content').value = '';
+    document.getElementById('a-review-content').focus();
+    document.getElementById('a-review-status').textContent = '';
+  });
+
+  document.getElementById('a-review-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('a-review-btn');
+    const statusEl = document.getElementById('a-review-status');
+    const content = document.getElementById('a-review-content').value.trim();
+    if (!content) {
+      showToast('反省会の本文を入力してください', true);
+      return;
+    }
+    btn.disabled = true;
+    statusEl.textContent = '';
+    try {
+      await API.adminSubmitReview({ adminCode: state.adminCode, raceId, content });
+      const saved = await API.getReview(raceId);
+      if (saved && saved['本文'] === content) {
+        showToast('反省会を保存しました');
         statusEl.textContent = `✓ 保存済み（${formatDateTime(saved['更新日時'])}）`;
       } else {
         showToast('保存の確認に失敗しました。もう一度お試しください', true);
