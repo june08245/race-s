@@ -877,6 +877,8 @@ async function renderEntries() {
   }
 
   const { visible, entries, count } = await API.getEntries(race['RaceID']);
+  const myEntry = state.userName ? await API.getMyEntry(race['RaceID'], state.userName) : null;
+  const hasSubmitted = !!myEntry;
 
   main.innerHTML = `
     ${renderRaceSwitcher(activeRaces, race['RaceID'])}
@@ -890,6 +892,18 @@ async function renderEntries() {
         🔒 締切後に公開されます。<br>もうしばらくお待ちください。
         ${count > 0 ? `<div class="entry-count-badge">✎ 現在 ${count}人 予想中</div>` : ''}
       </div>`;
+    return;
+  }
+
+  if (!hasSubmitted) {
+    list.innerHTML = `
+      <div class="locked-banner">
+        🔒 みんなの買い目は、自分の買い目を投稿した人だけ見られます。<br>
+        自分の予想を投稿してから見てみましょう。
+      </div>
+      <button class="submit-btn" id="go-entry-btn-2" style="margin-top:14px;">買い目を投稿する</button>
+    `;
+    document.getElementById('go-entry-btn-2').addEventListener('click', () => navigate('entry'));
     return;
   }
 
