@@ -359,9 +359,47 @@ async function renderPrediction() {
     return;
   }
 
-  const prediction = await API.getPrediction(race['RaceID']);
-  const review = await API.getReview(race['RaceID']);
   const horses = await API.getHorses(race['RaceID']);
+  const myEntry = state.userName ? await API.getMyEntry(race['RaceID'], state.userName) : null;
+  const hasSubmitted = !!myEntry;
+
+  let predictionSectionHtml;
+
+  if (!hasSubmitted) {
+    predictionSectionHtml = `
+      <h2 class="section-title">今週のAI予想</h2>
+      <div class="locked-banner">
+        🔒 AI予想は、自分の買い目を投稿した人だけ見られます。<br>
+        まずは自分の予想を投稿してみましょう。
+      </div>
+      <button class="submit-btn" id="go-entry-btn" style="margin-top:14px;">買い目を投稿する</button>
+    `;
+  } else {
+    const prediction = await API.getPrediction(race['RaceID']);
+    const review = await API.getReview(race['RaceID']);
+    predictionSectionHtml = `
+      <h2 class="section-title">今週のAI予想</h2>
+      ${prediction && prediction['本文'] ? `
+        <div class="card prediction-card">
+          <div class="prediction-meta">更新: ${formatDateTime(prediction['更新日時'])}</div>
+          <div class="prediction-body">${escapeHtml(prediction['本文'])}</div>
+        </div>
+      ` : `
+        <div class="empty-state">
+          <div class="es-icon">🧠</div>
+          <p>今週のAI予想はまだ投稿されていません。</p>
+        </div>
+      `}
+
+      ${review && review['本文'] ? `
+        <h2 class="section-title">AI反省会</h2>
+        <div class="card review-card">
+          <div class="prediction-meta">更新: ${formatDateTime(review['更新日時'])}</div>
+          <div class="prediction-body">${escapeHtml(review['本文'])}</div>
+        </div>
+      ` : ''}
+    `;
+  }
 
   main.innerHTML = `
     ${renderRaceSwitcher(activeRaces, race['RaceID'])}
@@ -369,28 +407,14 @@ async function renderPrediction() {
       <h2 class="section-title">出走馬・枠順</h2>
       ${renderHorseTable(horses)}
     ` : ''}
-    <h2 class="section-title">今週のAI予想</h2>
-    ${prediction && prediction['本文'] ? `
-      <div class="card prediction-card">
-        <div class="prediction-meta">更新: ${formatDateTime(prediction['更新日時'])}</div>
-        <div class="prediction-body">${escapeHtml(prediction['本文'])}</div>
-      </div>
-    ` : `
-      <div class="empty-state">
-        <div class="es-icon">🧠</div>
-        <p>今週のAI予想はまだ投稿されていません。</p>
-      </div>
-    `}
-
-    ${review && review['本文'] ? `
-      <h2 class="section-title">AI反省会</h2>
-      <div class="card review-card">
-        <div class="prediction-meta">更新: ${formatDateTime(review['更新日時'])}</div>
-        <div class="prediction-body">${escapeHtml(review['本文'])}</div>
-      </div>
-    ` : ''}
+    ${predictionSectionHtml}
   `;
   wireRaceSwitcher();
+
+  const goEntryBtn = document.getElementById('go-entry-btn');
+  if (goEntryBtn) {
+    goEntryBtn.addEventListener('click', () => navigate('entry'));
+  }
 }
 
 // ---------------- Entry Form (券種方式) ----------------
