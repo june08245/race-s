@@ -318,6 +318,12 @@ async function renderHome() {
       </a>
     ` : ''}
 
+    ${race['レース名'] && race['レース名'].includes('東海ステークス') ? `
+      <a href="tokai-sim.html" class="live-stream-btn" style="background: linear-gradient(180deg, #3a6ea8 0%, #2a5488 100%); box-shadow: 0 4px 14px rgba(58,110,168,0.3);">
+        🏇 東海ステークスレースシミュレーションを見る
+      </a>
+    ` : ''}
+
     ${liveUrl ? `
       <a href="${escapeHtml(liveUrl)}" target="_blank" rel="noopener" class="live-stream-btn">
         📺 今週のレース中継を見る
