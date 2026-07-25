@@ -412,6 +412,12 @@ async function renderPrediction() {
           <div class="prediction-body">${escapeHtml(review['本文'])}</div>
         </div>
       ` : ''}
+
+      ${race['レース名'] && race['レース名'].includes('関屋記念') ? `
+        <a href="race-sim.html" class="live-stream-btn" style="background: linear-gradient(180deg, #3a6ea8 0%, #2a5488 100%); box-shadow: 0 4px 14px rgba(58,110,168,0.3); margin-top: 16px;">
+          🏇 関屋記念レースシミュレーションを見る
+        </a>
+      ` : ''}
     `;
   }
 

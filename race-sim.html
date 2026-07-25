@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>関屋記念 レースシミュレーション｜Race Share</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; padding: 0; background: #071711; }
+  #root { min-height: 100vh; }
+  .back-link {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 100;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(14,36,25,0.85);
+    border: 1px solid #2a4536;
+    color: #c9a34e;
+    font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 999px;
+    backdrop-filter: blur(4px);
+  }
+</style>
+</head>
+<body>
+
+<a href="./" class="back-link">← Race Shareに戻る</a>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" src="race-sim.jsx"></script>
+
+</body>
+</html>
