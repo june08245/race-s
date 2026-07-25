@@ -546,8 +546,11 @@ function RaceSim() {
               const spread = Math.max(-spreadMax, Math.min(0.12, rawSpread));
               const trackT = ((baseT + spread) % 1 + 1) % 1;
               const pt = getPoint(trackT);
+              // 馬はtrackTが減少する方向（発走→ゴール）へ進む。pt.angleはtrackT増加方向を指すため、
+              // 実際の進行方向はその逆（+180度）。馬の向き・オフセット計算はこちらを使う。
+              const facingAngle = pt.angle + 180;
               const off = laneOffset(r.rank);
-              const rad = (pt.angle + 90) * (Math.PI / 180);
+              const rad = (facingAngle + 90) * (Math.PI / 180);
               // 道中は集団を少しコンパクトに寄せる（レーン幅を局面によって縮小）
               const laneShrink = t < 0.55 ? 0.75 : 1;
               const x2 = pt.x + Math.cos(rad) * off * laneShrink;
@@ -557,59 +560,91 @@ function RaceSim() {
               const strideCycle = (t * 900 + (r.luck ?? 0) * 40) % 8;
               const strideBob = Math.sin(strideCycle) * 1.6; // 上下の弾み
               const legPhase = strideCycle % (Math.PI * 2);
+              // 進行方向が画面の左向きか右向きかを判定し、水平方向のみ反転させる（頭が上・脚が下の姿勢は常に保つ）。
+              // コースの傾き（カーブ）はそのまま反映し、直線に近いほど水平、コーナーでは傾くようにする。
+              let normAngle = facingAngle % 360;
+              if (normAngle > 180) normAngle -= 360;
+              if (normAngle < -180) normAngle += 360;
+              const facingLeft = Math.abs(normAngle) > 90;
+              const mirror = facingLeft ? -1 : 1;
+              const tiltDeg = facingLeft
+                ? (normAngle > 0 ? normAngle - 180 : normAngle + 180)
+                : normAngle;
               return (
-                <g key={r.no} transform={`translate(${x2},${y2}) rotate(${pt.angle})`}>
+                <g key={r.no} transform={`translate(${x2},${y2}) rotate(${tiltDeg}) scale(${mirror},1)`}>
                   {/* 先頭馬の光の輪 */}
                   {isLeader && (
-                    <ellipse rx="22" ry="15" fill="none" stroke="#e8c766" strokeWidth="1.5" opacity="0.5">
+                    <ellipse rx="24" ry="14" fill="none" stroke="#e8c766" strokeWidth="1.5" opacity="0.5">
                       <animate attributeName="opacity" values="0.6;0.15;0.6" dur="0.9s" repeatCount="indefinite" />
                     </ellipse>
                   )}
                   {/* 砂煙（走行中のみ、後方に） */}
                   {(running || isReplay) && (
                     <>
-                      <ellipse cx="-16" cy="7" rx="4.5" ry="2.2" fill="#cbb98a" opacity="0.35" />
-                      <ellipse cx="-21" cy="8" rx="3" ry="1.6" fill="#cbb98a" opacity="0.22" />
+                      <ellipse cx="-17" cy="8" rx="4.5" ry="2.2" fill="#cbb98a" opacity="0.35" />
+                      <ellipse cx="-22" cy="9" rx="3" ry="1.6" fill="#cbb98a" opacity="0.22" />
                     </>
                   )}
                   {/* 影 */}
-                  <ellipse cx="0" cy="11" rx="10" ry="2.6" fill="#000" opacity="0.28" transform={`rotate(${-pt.angle})`} />
-                  {/* 後脚（後方2本） */}
-                  <g stroke="#2a1a10" strokeWidth="2" strokeLinecap="round" opacity="0.9">
-                    <line x1="-9" y1="3" x2={-9 + Math.sin(legPhase) * 4.5} y2="12" />
-                    <line x1="-6" y1="3" x2={-6 + Math.sin(legPhase + 0.6) * 4} y2="12" />
+                  <ellipse cx="0" cy="11.5" rx="11" ry="2.6" fill="#000" opacity="0.28" />
+                  {/* 後脚（後方2本・関節で折れる） */}
+                  <g stroke="#2a1a10" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
+                    <path d={`M -10,2 L ${-11 + Math.sin(legPhase) * 3},7 L ${-9 + Math.sin(legPhase) * 5},13`} />
+                    <path d={`M -6,2 L ${-7 + Math.sin(legPhase + 0.7) * 3},7 L ${-5 + Math.sin(legPhase + 0.7) * 5},13`} />
                   </g>
-                  {/* 尻尾 */}
+                  {/* 尻尾（房状） */}
                   <path
-                    d={`M -12,-1 Q ${-18 + Math.sin(legPhase * 0.6) * 2},2 -16,9`}
-                    fill="none" stroke="#1a1008" strokeWidth="2.2" strokeLinecap="round" opacity="0.85"
+                    d={`M -13,-2 Q ${-19 + Math.sin(legPhase * 0.6) * 2.5},1 ${-17 + Math.sin(legPhase * 0.6)},8
+                        M -13,-1 Q ${-17 + Math.sin(legPhase * 0.6) * 2},3 -15,9
+                        M -12,0 Q ${-16 + Math.sin(legPhase * 0.6) * 1.5},4 -14,10`}
+                    fill="none" stroke="#1a1008" strokeWidth="1.6" strokeLinecap="round" opacity="0.85"
                   />
-                  {/* 胴体（細長く） */}
-                  <ellipse cy={strideBob} rx="12" ry="6" fill={r.color} stroke="#111" strokeWidth="1.5" />
-                  {/* 前脚（前方2本） */}
-                  <g stroke="#2a1a10" strokeWidth="2" strokeLinecap="round" opacity="0.9">
-                    <line x1="6" y1="4" x2={6 + Math.sin(legPhase + Math.PI) * 4.5} y2="13" />
-                    <line x1="9" y1="4" x2={9 + Math.sin(legPhase + Math.PI + 0.6) * 4} y2="13" />
+                  {/* 胴体（腹〜尻にかけてなだらかな馬体ライン） */}
+                  <path
+                    d={`M -13,${strideBob + 1}
+                        C -14,${strideBob - 6} -6,${strideBob - 8} 2,${strideBob - 7}
+                        C 8,${strideBob - 6.5} 11,${strideBob - 3} 11,${strideBob + 1}
+                        C 11,${strideBob + 5} 6,${strideBob + 7} -2,${strideBob + 7}
+                        C -9,${strideBob + 7} -13,${strideBob + 5} -13,${strideBob + 1} Z`}
+                    fill={r.color} stroke="#111" strokeWidth="1.4"
+                  />
+                  {/* 前脚（前方2本・関節で折れる） */}
+                  <g stroke="#2a1a10" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.9">
+                    <path d={`M 6,3 L ${5 + Math.sin(legPhase + Math.PI) * 3},8 L ${7 + Math.sin(legPhase + Math.PI) * 5},14`} />
+                    <path d={`M 9,3 L ${8 + Math.sin(legPhase + Math.PI + 0.7) * 3},8 L ${10 + Math.sin(legPhase + Math.PI + 0.7) * 5},14`} />
                   </g>
-                  {/* 首（斜め上へ） */}
+                  {/* 首（弓なりに、太め） */}
                   <path
-                    d={`M 8,${strideBob - 2} Q 14,${strideBob - 9} 18,${strideBob - 11}`}
-                    fill="none" stroke={r.color} strokeWidth="6.5" strokeLinecap="round"
+                    d={`M 7,${strideBob - 4}
+                        C 11,${strideBob - 10} 15,${strideBob - 13} 20,${strideBob - 13}
+                        C 16,${strideBob - 11} 13,${strideBob - 7} 11,${strideBob - 2} Z`}
+                    fill={r.color} stroke="#111" strokeWidth="1.3"
                   />
-                  {/* 頭（鼻先は暗色でメリハリ） */}
-                  <ellipse cx="19.5" cy={strideBob - 12} rx="4.2" ry="3" fill={r.color} stroke="#111" strokeWidth="1.2" />
-                  <ellipse cx="23" cy={strideBob - 11.5} rx="2.2" ry="1.7" fill="#2a1a10" opacity="0.75" />
-                  {/* たてがみ */}
+                  {/* 耳 */}
+                  <path d={`M 19,${strideBob - 15} L 21,${strideBob - 18} L 22,${strideBob - 14.5} Z`} fill={r.color} stroke="#111" strokeWidth="0.8" />
+                  <path d={`M 22.5,${strideBob - 14.5} L 24,${strideBob - 17.5} L 25,${strideBob - 14} Z`} fill={r.color} stroke="#111" strokeWidth="0.8" />
+                  {/* 頭（面長のシルエット） */}
                   <path
-                    d={`M 9,${strideBob - 3} Q 13,${strideBob - 10} 18,${strideBob - 13}`}
-                    fill="none" stroke="#1a1008" strokeWidth="1.6" strokeLinecap="round" opacity="0.7"
+                    d={`M 18,${strideBob - 15}
+                        C 22,${strideBob - 15.5} 27,${strideBob - 13.5} 29,${strideBob - 10.5}
+                        C 30,${strideBob - 8.5} 28,${strideBob - 7} 25,${strideBob - 7.5}
+                        C 21,${strideBob - 8} 17,${strideBob - 10.5} 17,${strideBob - 12.5} Z`}
+                    fill={r.color} stroke="#111" strokeWidth="1.2"
+                  />
+                  {/* 鼻先（暗色でメリハリ） */}
+                  <ellipse cx="28" cy={strideBob - 9.3} rx="2.4" ry="1.7" fill="#2a1a10" opacity="0.8" />
+                  {/* たてがみ（複数のなびく房） */}
+                  <path
+                    d={`M 8,${strideBob - 5} Q 12,${strideBob - 11} 17,${strideBob - 14}
+                        M 9,${strideBob - 3} Q 13,${strideBob - 9} 18,${strideBob - 12.5}`}
+                    fill="none" stroke="#1a1008" strokeWidth="1.4" strokeLinecap="round" opacity="0.7"
                   />
                   {/* 勝負服の帯（枠色・鞍） */}
-                  <rect x="-5" y={strideBob - 4} width="9" height="7.5" rx="1.5" fill={WAKU_COLOR[r.waku]?.bg} opacity="0.9"
+                  <rect x="-5" y={strideBob - 6} width="10" height="7" rx="1.5" fill={WAKU_COLOR[r.waku]?.bg} opacity="0.9"
                     stroke="#111" strokeWidth="0.5" />
                   <text
-                    transform={`rotate(${-pt.angle})`}
-                    x="-0.5" y={strideBob + 3} textAnchor="middle" fontSize="9.5" fontWeight="800"
+                    transform={`scale(${mirror},1)`}
+                    x="0" y={strideBob - 1.5} textAnchor="middle" fontSize="8.5" fontWeight="800"
                     fill={r.text}
                   >{r.no}</text>
                 </g>
